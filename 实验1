@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>机械巨蛛之战 - 终极版</title>
+    <style>
+        /* 原有样式保持不变 */
+        canvas { border: 2px solid #333; background: #1a1a1a; }
+        #gameUI { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: white; }
+        .btn { padding: 15px 30px; font-size: 20px; margin: 10px; background: #4CAF50; border: none; border-radius: 5px; cursor: pointer; transition: all 0.3s; }
+        .btn:hover { background: #45a049; transform: scale(1.1); }
+        
+        /* 新增样式 */
+        #bossHealthBar { position: fixed; top: 20px; left: 120px; width: 200px; height: 20px; background: #444; border-radius: 10px; }
+        #bossHealth { height: 100%; background: #ff0000; border-radius: 10px; transition: width 0.3s; }
+        #skillBar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); }
+        .skillBtn { padding: 10px 20px; margin: 0 5px; background: #2196F3; border-radius: 5px; cursor: pointer; }
+        #virtualJoystick { position: fixed; bottom: 50px; left: 50px; width: 100px; height: 100px; opacity: 0.5; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="gameUI">
+        <h1 style="font-size: 48px; text-shadow: 2px 2px #000;">机械巨蛛之战</h1>
+        <button class="btn" onclick="startGame()">开始游戏</button>
+        <button class="btn" onclick="showInstructions()">操作说明</button>
+    </div>
+
+    <!-- 新增UI元素 -->
+    <div id="bossHealthBar"><div id="bossHealth"></div></div>
+    <div id="leaderboard"></div>
+    <div class="achievement-toast" id="achievementToast"></div>
+    <div id="skillBar">
+        <button class="skillBtn" onclick="activateShield()">护盾 (R)</button>
+    </div>
+    <div id="virtualJoystick"></div>
+
+<script>
+// ================= 全局配置 =================
+const config = {
+    missileSpeed: 0.1,
+    maxParticles: 100,
+    shieldDuration: 5000
+};
+
+// ================= 游戏状态 =================
+let gameState = {
+    status: 'MENU',
+    score: 0,
+    player: null,
+    boss: null,
+    drones: [],
+    bullets: [],
+    particles: [],
+    missiles: [],
+    skills: {
+        shield: { active: false, cooldown: 0 }
+    },
+    achievements: {
+        firstBlood: false,
+        combo: { count: 0, timer: 0 }
+    }
+};
+
+// ================= 初始化游戏 =================
+function initGame() {
+    gameState = {
+        status: 'PLAYING',
+        score: 0,
+        player: { x: 400, y: 500, size: 30, speed: 5, health: 100 },
+        boss: { x: 400, y: 100, phase: 1, health: 100, attackTimer: 0 },
+        // ...其他初始化状态
+    };
+    gameUI.style.display = 'none';
+    initMobileControls();
+}
+
+// ================= 粒子系统 =================
+class Particle {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 5;
+        this.vy = (Math.random() - 0.5) * 5;
+        this.life = 30;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+    }
+}
+
+function createExplosion(x, y) {
+    for(let i = 0; i < 10; i++) {
+        if(gameState.particles.length < config.maxParticles) {
+            gameState.particles.push(new Particle(x, y));
+        }
+    }
+}
+
+// ================= 导弹系统 =================
+class Missile {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = 2;
+    }
+
+    update() {
+        // 追踪逻辑
+        const dx = gameState.player.x - this.x;
+        const dy = gameState.player.y - this.y;
+        const angle = Math.atan2(dy, dx);
+        
+        this.vx += Math.cos(angle) * config.missileSpeed;
+        this.vy += Math.sin(angle) * config.missileSpeed;
